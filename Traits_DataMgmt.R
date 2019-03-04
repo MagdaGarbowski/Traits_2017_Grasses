@@ -62,7 +62,10 @@ SpeciesData[,c("LDMC")][SpeciesData[,c("LDMC")]==0]<-NA
 
 
 ### Keep relevant columns 
-SpeciesData<- as.data.frame(SpeciesData[, c(1,3,6,18,19,31,44,45,46,48:54)])
+SpeciesData<- as.data.frame(SpeciesData[, c("SAMPLE_ID", "SumOfLength.cm.", "SumOfAvgDiam.mm.",
+                                            "H_num","HT","LWD","RWD","POP_ID","Days","SPECIES","SLA.TOT",
+                                            "S.RL","TotWD","RMR","TotLDW","LDMC")])
 
 ### Write complete dataset to CSV 
 write.csv(SpeciesData, "HECO_ELTR_PLPA_VUOC.csv")
+

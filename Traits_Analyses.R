@@ -20,10 +20,10 @@ SpeciesData<-read.csv("HECO_ELTR_PLPA_VUOC.csv")
 #LDMC = LDMC
 #Height = HT
 
-# Select out 10 days 
-SpeciesData_10Day<-as.data.frame(SpeciesData [ which(SpeciesData$Days=='10'),  ])
-SpeciesData_24Day<-as.data.frame(SpeciesData [ which(SpeciesData$Days=='24'),  ])
-SpeciesData_42Day<-as.data.frame(SpeciesData [ which(SpeciesData$Days=='42'),  ])
+# Split by days 
+Species_splits = split(SpeciesData, paste(SpeciesData$Days, SpeciesData$SPECIES))
+
+# Have split now by days, also split by species instead of selecting them out individually?
 
 ####
 ####
@@ -35,23 +35,26 @@ SpeciesData_42Day<-as.data.frame(SpeciesData [ which(SpeciesData$Days=='42'),  ]
 
 HECO.data<-as.data.frame(SpeciesData [ which(SpeciesData$SPECIES=='HECO'),  ])
 
+tmp = split(HECO.data, HECO.data$PopNUM)
+lapply(tmp, function(x) ...)
+
 ### Duplicate POP_ID and change to PopNUM
 HECO.data$PopNUM<-HECO.data$POP_ID
 HECO.data$PopNUM<-as.integer(
   factor(HECO.data[,c("PopNUM")],levels=c("HECO_AZNC_KV","HECO_UTC_KRR","HECO_UTC_TMR","HECO_UTEC_GR","HECO_UTSW_SP")))
 
 ### 
-HECO.RL = as.data.frame(HECO.data[,c(18,3,5)])
+HECO.RL = as.data.frame(HECO.data[,c("S.RL", "PopNUM", "Days")])
 HECO.RL$PopNUM<-as.integer(HECO.RL$PopNUM)
 
 ### 10-Days 
-HECO.RL_10<-HECO.RL [(HECO.RL$Days%in%c("10")), ]
+HECO.RL_10<-HECO.RL [(HECO.RL$Days%in%c("1")), ]
 # Compile model
 mod = stan_model("Traits_1.stan")
 data_list = list(alpha_mu=0,
-                 beta_mu=4,
+                 beta_mu=10,
                  alpha_sigma=0,
-                 beta_sigma=0.8,
+                 beta_sigma=10,
                  N=nrow(HECO.RL_10),
                  n_grps = length(unique(HECO.RL_10$PopNUM)),
                  grp = HECO.RL_10$PopNUM,
@@ -71,7 +74,7 @@ aggregate(HECO.RL_10[,3], by=list(PoppNUM=HECO.RL_10$PopNUM), FUN=mean)
 aggregate(HECO.RL_10[,3], by=list(PoppNUM=HECO.RL_10$PopNUM), FUN=sd)
 
 ### 24-Days 
-HECO.RL_24<-HECO.RL [(HECO.RL$Days%in%c("24")), ]
+HECO.RL_24<-HECO.RL [(HECO.RL$Days%in%c("2")), ]
 # Compile model
 mod = stan_model("Traits_1.stan")
 data_list = list(alpha_mu=0,
