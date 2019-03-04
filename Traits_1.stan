@@ -34,10 +34,12 @@ model{
 generated quantities{
   vector[n_grps] mu[max(H_num)]; 
   vector[n_grps] sigma[max(H_num)]; 
+  vector[n_grps] cv[max(H_num)]; 
   for(t in 1:max(H_num))
 	for(n in 1:n_grps){
 	  mu[t,n] = exp(log_mu[n] + beta_H_num[t] + 0.5 * log_sigma[n]^2);
 	  sigma[t,n] = sqrt(mu[t,n]^2 * (exp(log_sigma[n]^2) - 1));
+	  cv[t,n] = sigma[t,n] / mu[t.n];
 	}
   
 }
