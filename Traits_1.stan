@@ -24,11 +24,11 @@ parameters{
 model{
   // Priors
   beta_H_num ~ normal(0, var_H_num);
-  log_mu ~ normal(mean_mu, mean_sigma);
+  log_mu ~ normal(mean_mu, mean_sigma);  // change these to logistic as well? 
   log_sigma ~ normal(var_mu, var_sigma);
 
   // Likelihood
-  y ~ lognormal(log_mu[grp] + beta_H_num[H_num], log_sigma[grp]);
+  y ~ lognormal(log_mu[grp] + beta_H_num[H_num], log_sigma[grp]); // To change for props. use logistic 
 }
 
 generated quantities{
@@ -37,9 +37,9 @@ generated quantities{
   vector[n_grps] cv[max(H_num)]; 
   for(t in 1:max(H_num))
 	for(n in 1:n_grps){
-	  mu[t,n] = exp(log_mu[n] + beta_H_num[t] + 0.5 * log_sigma[n]^2);
+	  mu[t,n] = exp(log_mu[n] + beta_H_num[t] + 0.5 * log_sigma[n]^2); // To back transform use inv_logit (logistic_mu[n])
 	  sigma[t,n] = sqrt(mu[t,n]^2 * (exp(log_sigma[n]^2) - 1));
-	  cv[t,n] = sigma[t,n] / mu[t.n];
+	  cv[t,n] = sigma[t,n] / mu[t,n];
 	}
   
 }

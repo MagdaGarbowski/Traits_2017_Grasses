@@ -35,8 +35,8 @@ Species_splits = split(SpeciesData, paste(SpeciesData$Days, SpeciesData$SPECIES)
 
 HECO.data<-as.data.frame(SpeciesData [ which(SpeciesData$SPECIES=='HECO'),  ])
 
-tmp = split(HECO.data, HECO.data$PopNUM)
-lapply(tmp, function(x) ...)
+# tmp = split(HECO.data, HECO.data$PopNUM)
+# lapply(tmp, function(x) ...)
 
 ### Duplicate POP_ID and change to PopNUM
 HECO.data$PopNUM<-HECO.data$POP_ID
@@ -44,33 +44,34 @@ HECO.data$PopNUM<-as.integer(
   factor(HECO.data[,c("PopNUM")],levels=c("HECO_AZNC_KV","HECO_UTC_KRR","HECO_UTC_TMR","HECO_UTEC_GR","HECO_UTSW_SP")))
 
 ### 
-HECO.RL = as.data.frame(HECO.data[,c("S.RL", "PopNUM", "Days")])
-HECO.RL$PopNUM<-as.integer(HECO.RL$PopNUM)
+HECO.SRL = as.data.frame(HECO.data[,c("S.RL", "PopNUM", "H_num")])
 
-### 10-Days 
-HECO.RL_10<-HECO.RL [(HECO.RL$Days%in%c("1")), ]
 # Compile model
 mod = stan_model("Traits_1.stan")
-data_list = list(alpha_mu=0,
-                 beta_mu=10,
-                 alpha_sigma=0,
-                 beta_sigma=10,
-                 N=nrow(HECO.RL_10),
-                 n_grps = length(unique(HECO.RL_10$PopNUM)),
-                 grp = HECO.RL_10$PopNUM,
-                 y = HECO.RL_10$S.RL)
+data_list = list(mean_mu=0,
+                 mean_sigma=10,
+                 var_mu=0,
+                 var_sigma=2,
+                 var_H_num=10, # This is the prior on the difference between time 3 and time 1 
+                 N=nrow(HECO.SRL),
+                 n_grps = length(unique(HECO.SRL$PopNUM)),
+                 H_num = HECO.SRL$H_num,
+                 grp = HECO.SRL$PopNUM,
+                 y = HECO.SRL$S.RL)
 # Sample
-HECO_fit_SRL_10day = sampling(mod, data = data_list)
+HECO_fit_SRL = sampling(mod, data = data_list)
+plot_1<-plot(HECO_fit_SRL, pars=c("sigma"), ci_level=.8, outer_level=.95)
+stan_dens(HECO_fit_SRL, pars=c("mu"), ci_level=.8, outer_level=.95)
 
 # Look at output
-print(HECO_fit_SRL_10day, pars = c("mu", "sigma", "mu_regional"), digits = 2)
+print(HECO_fit_SRL, pars="mu", digits = 2)
 HECO_10day_SRL_mu_plot<-plot(HECO_fit_SRL_10day, pars = "mu",fill_color=c("deepskyblue2","olivedrab3", "olivedrab4", "forestgreen", "deepskyblue3"))
 HECO_10day_SRL_sigma_plot<-plot(HECO_fit_SRL_10day, pars = "sigma",fill_color=c("deepskyblue2","olivedrab3", "olivedrab4", "forestgreen", "deepskyblue3"))
-HECO_10day_SRL_sigma_plot<-plot(HECO_fit_SRL_10day, pars = "sigma",fill_color=c("deepskyblue2","olivedrab3", "olivedrab4", "forestgreen", "deepskyblue3"))
-
 
 # Check against empirical values
-aggregate(HECO.RL_10[,3], by=list(PoppNUM=HECO.RL_10$PopNUM), FUN=mean)
+aggregate(HECO.RL$S.RL, by=list(Pop_N=HECO.RL$PopNUM, H_num=HECO.RL$H_num), FUN=median)
+
+
 aggregate(HECO.RL_10[,3], by=list(PoppNUM=HECO.RL_10$PopNUM), FUN=sd)
 
 ### 24-Days 
@@ -89,6 +90,8 @@ data_list = list(alpha_mu=0,
 HECO_fit_SRL_24day = sampling(mod, data = data_list)
 
 # Look at output
+### Can chance names with names (object_fit)
+### Cor flip? 
 print(HECO_fit_SRL_24day, pars = c("mu", "sigma"))
 HECO_24day_SRL_mu_plot<-plot(HECO_fit_SRL_24day, pars = "mu",fill_color=c("deepskyblue2","olivedrab3", "olivedrab4", "forestgreen", "deepskyblue3"))
 HECO_24day_SRL_sigma_plot<-plot(HECO_fit_SRL_24day, pars = "sigma",fill_color=c("deepskyblue2","olivedrab3", "olivedrab4", "forestgreen", "deepskyblue3"))
