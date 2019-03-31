@@ -8,9 +8,9 @@ library(plyr)
 library(data.table)
 library(ggplot2)
 library(gridExtra)
+setwd("/Users/MagdaGarbowski/Traits_2017_Grasses")
 
 SpeciesData<-read.csv("HECO_ELTR_PLPA_VUOC.csv")
-
 
 #Total Weight = TotWD
 #Total Root Length=SumOfLength.cm.
@@ -21,7 +21,7 @@ SpeciesData<-read.csv("HECO_ELTR_PLPA_VUOC.csv")
 #Height = HT
 
 # Split by days 
-Species_splits = split(SpeciesData, paste(SpeciesData$Days, SpeciesData$SPECIES))
+#Species_splits = split(SpeciesData, paste(SpeciesData$Days, SpeciesData$SPECIES))
 
 # Have split now by days, also split by species instead of selecting them out individually?
 
@@ -44,35 +44,131 @@ HECO.data$PopNUM<-as.integer(
   factor(HECO.data[,c("PopNUM")],levels=c("HECO_AZNC_KV","HECO_UTC_KRR","HECO_UTC_TMR","HECO_UTEC_GR","HECO_UTSW_SP")))
 
 ### 
-HECO.SRL = as.data.frame(HECO.data[,c("S.RL", "PopNUM", "H_num")])
-
+HECO.SLA = as.data.frame(HECO.data[,c("SLA.TOT", "PopNUM", "H_num")])
+HECO.SLA<-HECO.SLA[complete.cases(HECO.SLA), ]
 # Compile model
-mod = stan_model("Traits_1.stan")
+mod = stan_model("Traits_1_positive_continuous.stan")
 data_list = list(mean_mu=0,
                  mean_sigma=10,
                  var_mu=0,
                  var_sigma=2,
                  var_H_num=10, # This is the prior on the difference between time 3 and time 1 
-                 N=nrow(HECO.SRL),
-                 n_grps = length(unique(HECO.SRL$PopNUM)),
-                 H_num = HECO.SRL$H_num,
-                 grp = HECO.SRL$PopNUM,
-                 y = HECO.SRL$S.RL)
+                 N=nrow(HECO.SLA),
+                 n_grps = length(unique(HECO.SLA$PopNUM)),
+                 H_num = HECO.SLA$H_num,
+                 grp = HECO.SLA$PopNUM,
+                 y = HECO.SLA$SLA.TOT)
 # Sample
-HECO_fit_SRL = sampling(mod, data = data_list)
-plot_1<-plot(HECO_fit_SRL, pars=c("sigma"), ci_level=.8, outer_level=.95)
-stan_dens(HECO_fit_SRL, pars=c("mu"), ci_level=.8, outer_level=.95)
+HECO_fit_SLA = sampling(mod, data = data_list)
+
 
 # Look at output
-print(HECO_fit_SRL, pars="mu", digits = 2)
-HECO_10day_SRL_mu_plot<-plot(HECO_fit_SRL_10day, pars = "mu",fill_color=c("deepskyblue2","olivedrab3", "olivedrab4", "forestgreen", "deepskyblue3"))
-HECO_10day_SRL_sigma_plot<-plot(HECO_fit_SRL_10day, pars = "sigma",fill_color=c("deepskyblue2","olivedrab3", "olivedrab4", "forestgreen", "deepskyblue3"))
+print(HECO_fit_SLA, pars="mu", digits = 2)
+
+### Change ggplot labels here 
+### Add a "species average"... get this from the model? New derived quatity? 
+
+## 10 day - HECO 
+HECO_SLA_mu_10day<-plot(HECO_fit_SLA, pars=c("mu[1,1]", "mu[1,2]","mu[1,3]","mu[1,4]","mu[1,5]"), 
+                        ci_level=.8, outer_level=.90, 
+                        point_est="mean",
+                        fill_color=c("deepskyblue2","olivedrab3", "olivedrab4", "forestgreen", "deepskyblue3"))+
+  coord_flip() + xlim(4,55) + theme_bw() + labs(y = "Accession", x = "Specific Leaf Area", title="10 days old") + grid_lines(color="white") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+## 24 Day - HECO 
+HECO_SLA_mu_24day<-plot(HECO_fit_SLA, pars=c("mu[2,1]", "mu[2,2]","mu[2,3]","mu[2,4]","mu[2,5]"), 
+                        ci_level=.8, outer_level=.90, point_est="mean",
+                        fill_color=c("deepskyblue2","olivedrab3", "olivedrab4", "forestgreen", "deepskyblue3"))+ 
+  coord_flip() + xlim(4,55) + theme_bw() + labs(y = "Accession", x = "Specific Leaf Area", title="24 days old") + grid_lines(color="white") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+## 42 Day - HECO 
+HECO_SLA_mu_42day<-plot(HECO_fit_SLA, pars=c("mu[3,1]", "mu[3,2]","mu[3,3]","mu[3,4]","mu[3,5]"), 
+                        ci_level=.8, outer_level=.90, point_est="mean",
+                        fill_color=c("deepskyblue2","olivedrab3", "olivedrab4", "forestgreen", "deepskyblue3"))+ 
+  coord_flip() + xlim(4,55) + theme_bw() + labs(y = "Accession", x = "Specific Leaf Area",title="42 days old") + grid_lines(color="white")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+grid.arrange(HECO_SLA_mu_10day, HECO_SLA_mu_24day, HECO_SLA_mu_42day, ncol=3)
+
+
+print(HECO_fit_SLA, pars="cv", digits = 2)
+## 10 day - HECO 
+HECO_SLA_cv_10day<-plot(HECO_fit_SLA, pars=c("cv[1,1]", "cv[1,2]","cv[1,3]","cv[1,4]","cv[1,5]"), 
+                        ci_level=.8, outer_level=.90, 
+                        point_est="mean",
+                        fill_color=c("deepskyblue2","olivedrab3", "olivedrab4", "forestgreen", "deepskyblue3"))+
+  coord_flip() + xlim(0,2.5) + theme_bw() + labs(y = "Accession", x = "Specific Leaf Area", title="10 days old") + grid_lines(color="white") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+## 24 Day - HECO 
+HECO_SLA_cv_24day<-plot(HECO_fit_SLA, pars=c("cv[2,1]", "cv[2,2]","cv[2,3]","cv[2,4]","cv[2,5]"), 
+                        ci_level=.8, outer_level=.90, point_est="mean",
+                        fill_color=c("deepskyblue2","olivedrab3", "olivedrab4", "forestgreen", "deepskyblue3"))+ 
+  coord_flip() + xlim(0,2.5) + theme_bw() + labs(y = "Accession", x = "Specific Leaf Area", title="24 days old") + grid_lines(color="white") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+## 42 Day - HECO 
+HECO_SLA_cv_42day<-plot(HECO_fit_SLA, pars=c("cv[3,1]", "cv[3,2]","cv[3,3]","cv[3,4]","cv[3,5]"), 
+                        ci_level=.8, outer_level=.90, point_est="mean",
+                        fill_color=c("deepskyblue2","olivedrab3", "olivedrab4", "forestgreen", "deepskyblue3"))+ 
+  coord_flip() + xlim(0,2.5) + theme_bw() + labs(y = "Accession", x = "Specific Leaf Area",title="42 days old") + grid_lines(color="white")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+grid.arrange(HECO_SLA_cv_10day, HECO_SLA_cv_24day, HECO_SLA_cv_42day, ncol=3)
+
+
+
+
+
+
+
+
+
+
+
+HECO_10day_SLA_mu_plot<-plot(HECO_fit_SLA_10day, pars = "mu",fill_color=c("deepskyblue2","olivedrab3", "olivedrab4", "forestgreen", "deepskyblue3"))
+HECO_10day_SLA_sigma_plot<-plot(HECO_fit_SLA_10day, pars = "sigma",fill_color=c("deepskyblue2","olivedrab3", "olivedrab4", "forestgreen", "deepskyblue3"))
 
 # Check against empirical values
-aggregate(HECO.RL$S.RL, by=list(Pop_N=HECO.RL$PopNUM, H_num=HECO.RL$H_num), FUN=median)
+aggregate(HECO.SLA$SLA.TOT, by=list(Pop_N=HECO.SLA$PopNUM, H_num=HECO.SAL$H_num), FUN=median)
 
 
-aggregate(HECO.RL_10[,3], by=list(PoppNUM=HECO.RL_10$PopNUM), FUN=sd)
+
+### 
+HECO.RMR = as.data.frame(HECO.data[,c("RMR", "PopNUM", "H_num")])
+HECO.RMR<-HECO.RMR[-1,]
+
+# Compile model
+mod = stan_model("Traits_1_proportions.stan")
+data_list = list(mean_mu=0,
+                 mean_sigma=2,
+                 var_mu=0,
+                 var_sigma=2,
+                 var_H_num=10, # This is the prior on the difference between time 3 and time 1 
+                 N=nrow(HECO.RMR),
+                 n_grps = length(unique(HECO.RMR$PopNUM)),
+                 H_num = HECO.RMR$H_num,
+                 grp = HECO.RMR$PopNUM,
+                 y = HECO.RMR$RMR)
+# Sample
+HECO_fit_RMR = sampling(mod, data = data_list)
+
+# Look at output
+print(HECO_fit_RMR, pars="sigma", digits = 4)
+
+plot_1<-plot(HECO_fit_RMR, pars=c("mu"), ci_level=.8, outer_level=.95)
+stan_dens(HECO_fit_RMR, pars=c("mu"), ci_level=.8, outer_level=.95)
+
+HECO_10day_RMR_mu_plot<-plot(HECO_fit_RMR_10day, pars = "mu",fill_color=c("deepskyblue2","olivedrab3", "olivedrab4", "forestgreen", "deepskyblue3"))
+HECO_10day_RMR_sigma_plot<-plot(HECO_fit_RMR_10day, pars = "sigma",fill_color=c("deepskyblue2","olivedrab3", "olivedrab4", "forestgreen", "deepskyblue3"))
+
+# Check against empirical values
+aggregate(HECO.RMR$RMR, by=list(Pop_N=HECO.RMR$PopNUM, H_num=HECO.RMR$H_num), FUN=mean)
+aggregate(HECO.RMR_10[,3], by=list(PoppNUM=HECO.RMR_10$PopNUM), FUN=sd)
+
+
 
 ### 24-Days 
 HECO.RL_24<-HECO.RL [(HECO.RL$Days%in%c("2")), ]
