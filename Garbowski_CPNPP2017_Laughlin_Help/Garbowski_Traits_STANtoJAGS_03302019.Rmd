@@ -1,0 +1,277 @@
+---
+output:
+  html_document:
+    fig_height: 8.5
+    fig_width: 11
+  pdf_document: default
+---
+```{r setup, include=F}
+knitr::opts_chunk$set(echo = TRUE)
+```
+### Garbowski - 2017 CPNPP Traits
+
+**The situation:** These data were collected to assess variation within and among species that the Bureau of Land Management (Colorado Plateau Native Plant Program) is interested in developing for restoration. The data were not intended to answer any specific reasearch questions. Still, I hope they can be used to answer some "retroactive" questions. 
+
+**The data: ** Data were collected from 11 native species (3-6 populations of each) at four timepoints: 10 days old, 24 days old, 42 days old, and 84 days old. At each sampling timepoint, on average, four individuals per species per population were measured. Everything was grown in greenhouse conditions and all indidivudals of a given species were seeded at more or less the same time. For slow growing species, the 10-day measurements are problematic (lots of zeors) and for most species, but especially fast growing ones, the 84-day measurements are problematic because plants became quite root bound in pots (84-day data not included here). The associated data set (Garbowski_HECO_ELTR_PLPA_VUOC.csv) has four of the 11 species in it.
+
+**Current approach:** So far I've been exploring differences in trait means and variances within and among populations of individual species at individual timepoints. 
+
+**Goals/What I'd appreciate help with (1 - 3, maybe 4 down the road).**<br />
+**Technical Questions:**
+
+1. How can I model and extract variance estimates (sigma or tau) from each population in JAGS? I figured this out! I've incoorporated it into the "24-day model". 
+2. How can I include sampling date (harvest time, "H_num"" or "Days" in the data file) into my model so differences can be compared within/among population(s) but at different times? 
+3. Is the model I am using appropriate? 
+    + Do the priors/distributions I'm using seem appropriate? 
+    + Since I'll mostly be working with positive continous traits (even those that fall between 0-1), can I use the same model over and over again? Can I use the same priors each time? 
+    
+4. Evenutally...How can I compare among species?
+
+**Conceptual Questions (Ideas for chapters/papers):**
+
+1. I'd like to assess within species variation using data I've collected and compare it to data available in TRY. Mitchell, R. M. and J.D. Bakker (2013) Functional Ecology do this with *Hypochaeris radicata*. I suspect this would result in a pretty discriptive paper with a central research question along the lines of "Are publically available trait values reflective of seedling trait values from multiple populations?" I would probably only focus on one or two traits that seem to be the most popular and for which values are available in TRY (e.g. SLA?) **Does this seem reasonable?**
+
+2. I'd like to compare trait means and variances among sampling dates within populations or species with a central question along the lines of "How do individual traits (and maybe trait correlations?) change through time for a given population/species?" To look at correlations, I think I would need to lump estimates together from different populations at sampling timepoints - four measures/timepoint doesn't seem like enough. If I were to combine measures within a species, I would have ~16-20 samples/timepoint which still may not be enough or may not be as interesting to look into. **Are correlations among traits likely to change with ontogeny? I'm familiar with your Ecology and Evolution (2017) paper but do you have any other recommendations for reading/background?**
+
+Below is an example of my appraoch so far (translated to the best of my ability from STAN to JAGS). I am still "hacking" to try to get things to work and when something does work I cross my fingers and hope I'm not making too many serious mistakes. 
+
+##### Load data and packages 
+```{r include=T, message=F, warning=F}
+#Load packages
+library(ggplot2)
+library(rjags)
+library(parallel)
+library(runjags)
+library(reshape)
+library(coda)
+library(knitr)
+
+# Load data 
+Trait2017_data<-read.csv("/Users/MagdaGarbowski/Traits_2017_Grasses/Garbowski_CPNPP2017_Laughlin_Help/Garbowski_HECO_ELTR_PLPA_VUOC.csv")
+# Subset Heterostipa comata (HECO) 
+HECO_data<-Trait2017_data[Trait2017_data$SPECIES=="HECO",]
+# Create integer index for POP_NUM
+HECO_data$POP_ID.index<-as.integer(
+  factor(HECO_data[,c("POP_ID")],levels=c("HECO_AZNC_KV","HECO_UTC_KRR","HECO_UTC_TMR","HECO_UTEC_GR","HECO_UTSW_SP")))
+HECO_data<-HECO_data[complete.cases(HECO_data), ]
+kable(head(HECO_data))
+# SumOfLength.cm. = root length
+# SumOfAvgDiam.mm. = root diameter
+# H_num = Harvest number (days)
+# HT = height
+# LWD = leaf weight dry
+# RWD = root weight dry
+# POP_ID = Population ID
+# Days = Days at harvest  
+# S.RL = Specific root length 
+# TotWD = Total weight dry
+# LDMC = leaf dry matter content 
+# POP_ID.index = populaton index 
+```
+
+
+```{r include=F, message=F, warning=F, echo=F, results = "hide"}
+####  Pooled Model 
+# Pooled data for all populations of HECO. Working with SLA column.
+
+# Input Data
+data = list(
+  y.SLA = (HECO_data$SLA.TOT),
+  n = length(HECO_data$SLA.TOT)) # number of observations (n) for the JAGS counter
+
+# Model
+{
+  sink("Garbowski_Pooled_POPS_JAGS.R")
+  cat("
+model{
+# Priors
+  mu_log_y ~ dnorm(0, 0.001)
+  sigma_log_y ~ dunif(0,60)
+  mu_Y <- exp(mu_log_y+sigma_log_y^2/2)
+  sigma_Y <- sqrt(exp(2*mu_log_y+sigma_log_y^2)*(exp(sigma_log_y^2)-1))
+        # Likelihood
+        for(i in 1:n){
+        y.SLA[i]~dlnorm(mu_log_y,1/sigma_log_y^2)}
+      }
+  ", fill=T)
+  sink()
+}
+
+# Set intial conditions for the parameters within each chain 
+inits = list(
+  list(
+    mu_log_y = 0,
+    sigma_log_y = .5
+  ),
+  list(
+    mu_log_y = 1,
+    sigma_log_y = 1
+  )
+)
+  
+# Write JAGS model and run
+
+out.pooled.SLA = run.jags(model="Garbowski_Pooled_POPS_JAGS.R", method="rjparallel",
+               monitor=c( "mu_Y", "sigma_Y"),
+               data=data, n.chains=2, inits=inits,
+               adapt=250, burnin=250, sample=5000, thin=1)
+output.pooled.SLA <- summary(out.pooled.SLA$mcmc)
+# Trace plots chains for model parameters
+plot(out.pooled.SLA$mcmc)
+# Summary table 
+as.table(output.pooled.SLA$statistics)
+# Test for convergence using the Gelman diagnostic
+gelman.diag(out.pooled.SLA$mcmc)
+```
+
+#### Model with estimates of mu for each population - all timepoints together. 
+Measurements at all timepoints are being lumped together 
+```{r include=T, message=F, warning=F}
+y.POP.n = length(unique(HECO_data$POP_ID)) 
+
+#  Data
+data = list(
+  y.SLA = (HECO_data$SLA.TOT),
+  y.POP.group = HECO_data$POP_ID.index,
+  y.POP.n = length(unique(HECO_data$POP_ID)),
+  n = nrow(HECO_data))
+
+# Initial conditions
+
+inits = list(
+  list(
+    mu_pop = rep(5, y.POP.n),
+    sigma = 10,
+    mu_log = 0,
+    sigma_log = .5
+  ),
+  list(
+    mu_pop = rep(10, y.POP.n),
+    sigma = 15,
+    mu_log = 1,
+    sigma_log = 1
+  )
+)
+
+{
+  sink("Garbowski_Individual_POPS_JAGS.R")
+  cat("
+    model{
+
+# Priors
+  
+  sigma ~ dunif (0,60)
+  mu_log ~ dnorm(0, 0.001)
+  sigma_log ~ dunif(0,60)
+
+  mu_y= exp(mu_log+sigma_log^2/2)
+  sigma_y = sqrt(exp(2*mu_log+sigma_log^2)*(exp(sigma_log^2)-1))
+  tau_y = 1/(sigma_y^2)
+
+# Likelihood
+      for(i in 1:n){
+      mu[i] = mu_pop[y.POP.group[i]]  
+      y.SLA[i] ~ dnorm(mu[i], tau_y) }
+for (j in 1:y.POP.n){ #set loop to cycle through POPS
+        mu_pop[j]~dlnorm(mu_y,tau_y)
+}}
+  ", fill=T)
+  sink()
+}
+
+# Write JAGS model and run
+out.individual.SLA = run.jags(model="Garbowski_Individual_POPS_JAGS.R", method="rjparallel",
+               monitor=c("mu_pop"),
+               data=data, n.chains=2, inits=inits,
+               adapt=250, burnin=250, sample=5000, thin=1)
+output.individual.SLA <- summary(out.individual.SLA$mcmc)
+# Produce trace plots of the chains for model parameters
+plot(out.individual.SLA$mcmc)
+# Summary table for the parameters
+as.data.frame(output.individual.SLA$statistics)
+# Test for convergence using the Gelman diagnostic
+gelman.diag(out.individual.SLA$mcmc)
+
+
+# Check against "regular" means
+HECO_SLA<-HECO_data[, c("POP_ID","SLA.TOT" )]
+aggregate(HECO_SLA[,2], list(HECO_SLA$POP_ID), mean)
+
+```
+
+#### SAME model with estimates of mu for each population but only with 24-DAY SUBSET of data.
+#### 24 DAY MODEL 
+Currently, I'm **subsetting**  data from each species at a single timepoint - in this case the 24-day timepoint. It would be **great** to not do this and have all data from all timepoints for a given species in the same model. I assume I need to add a time term to my model? Also, I DID figure out how to extract variance estimates but it resulted in some funky MCMC trace plots for mu_group[1] and sigma_group[1]. How problematic is this? 
+
+```{r include=T, message=F, warning=F}
+HECO_24Day_data<-HECO_data [(HECO_data$Days%in%c("24")), ]
+y.POP.n = length(unique(HECO_24Day_data$POP_ID)) 
+
+# Input Data 
+data = list(
+  y.SLA = (HECO_24Day_data$SLA.TOT),
+  y.POP.group = HECO_24Day_data$POP_ID.index,
+  y.POP.n = length(unique(HECO_24Day_data$POP_ID)),
+  n = nrow(HECO_24Day_data))
+
+# Initial conditions
+
+inits = list(
+  list(
+    mu_group = rep(5, y.POP.n),
+    sigma_group = rep(10, y.POP.n),
+    mu_log = 0,
+    sigma_log = .5
+  ),
+  list(
+    mu_group = rep(10, y.POP.n),
+    sigma_group = rep(15, y.POP.n),
+    mu_log = 1,
+    sigma_log = 1
+  )
+)
+
+{
+  sink("Garbowski_Individual_POPS_JAGS.R")
+  cat("
+      model{
+      # Priors
+      
+      mu_log ~ dnorm(0, 0.001)
+      sigma_log ~ dunif(0,40)
+      
+      mu_y= exp(mu_log+sigma_log^2/2)
+      sigma_y = sqrt(exp(2*mu_log+sigma_log^2)*(exp(sigma_log^2)-1))
+      tau_y = 1/(sigma_y^2)
+      
+      # Likelihood
+      for(i in 1:n){
+      mu[i] = mu_group[y.POP.group[i]] 
+      sigma[i] = sigma_group[y.POP.group[i]]
+      tau [i] = 1/sigma [i]^2
+      y.SLA[i] ~ dnorm(mu[i], tau [i]) }
+
+      for (j in 1:y.POP.n){ # set loop to cycle through POPS
+      mu_group[j] ~ dlnorm(mu_y, tau_y) # To make pops TOTALLY
+      sigma_group[j] ~ dunif(0, 40) 
+      }}
+      ", fill=T)
+  sink()
+}
+
+# Write JAGS model and run
+out.individual.SLA = run.jags(model="Garbowski_Individual_POPS_JAGS.R", method="rjparallel",
+                              monitor=c("mu_group", "sigma_group"),
+                              data=data, n.chains=2, inits=inits,
+                              adapt=250, burnin=250, sample=5000, thin=1)
+output.individual.SLA <- summary(out.individual.SLA$mcmc)
+#Produce trace plots of the chains for model parameters
+plot(out.individual.SLA$mcmc)
+#Produce a summary table for the parameters
+as.data.frame(output.individual.SLA$statistics)
+#Test for convergence using the Gelman diagnostic
+gelman.diag(out.individual.SLA$mcmc)
+#Check against "regular" means
+HECO_SLA<-HECO_24Day_data[, c("POP_ID","SLA.TOT" )]
+aggregate(HECO_SLA[,2], list(HECO_SLA$POP_ID), mean)
+```
